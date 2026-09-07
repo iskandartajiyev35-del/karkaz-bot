@@ -8,8 +8,13 @@ Ishlash tartibi:
 """
 
 import asyncio
+import json
 import logging
 import os
+from datetime import datetime
+
+import gspread
+from google.oauth2.service_account import Credentials
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
@@ -31,6 +36,10 @@ from aiogram.types import (
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")  # sizning shaxsiy Telegram ID raqamingiz
 
+# Google Sheets uchun (ixtiyoriy - agar kiritilmasa, bot baribir ishlayveradi)
+GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS")  # service account JSON (bitta qatorda)
+SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")  # jadval linkidagi ID
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -38,6 +47,23 @@ if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN topilmadi! Railway'ning Variables bo'limiga qo'shing.")
 if not ADMIN_ID:
     raise RuntimeError("ADMIN_ID topilmadi! Railway'ning Variables bo'limiga qo'shing.")
+
+_sheet = None
+if GOOGLE_CREDENTIALS and SPREADSHEET_ID:
+    try:
+        _creds_dict = json.loads(GOOGLE_CREDENTIALS)
+        _scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive",
+        ]
+        _creds = Credentials.from_service_account_info(_creds_dict, scopes=_scopes)
+        _client = gspread.authorize(_creds)
+        _sheet = _client.open_by_key(SPREADSHEET_ID).sheet1
+        logger.info("Google Sheets muvaffaqiyatli ulandi.")
+    except Exception as e:
+        logger.error("Google Sheetsga ulanishda xatolik: %s", e)
+else:
+    logger.info("GOOGLE_CREDENTIALS yoki SPREADSHEET_ID kiritilmagan - Sheets o'chirilgan.")
 
 ADMIN_ID = int(ADMIN_ID)
 
@@ -319,6 +345,26 @@ async def finish_application(message: Message, state: FSMContext) -> None:
             await bot.send_message(ADMIN_ID, caption)
     except Exception as e:  # admin bilan bot suhbati boshlanmagan bo'lishi mumkin
         logger.error("Adminga yuborishda xatolik: %s", e)
+
+    # Google Sheets jadvaliga qator qo'shish
+    if _sheet is not None:
+        try:
+            _sheet.append_row(
+                [
+                    datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    data.get("org_name", ""),
+                    data.get("location", ""),
+                    data.get("product_name", ""),
+                    data.get("size", ""),
+                    data.get("expiry", ""),
+                    data.get("phone", ""),
+                    username,
+                    str(user.id),
+                    lang.upper(),
+                ]
+            )
+        except Exception as e:
+            logger.error("Google Sheetsga yozishda xatolik: %s", e)
 
     await state.clear()
 
