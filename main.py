@@ -5,8 +5,8 @@ Qurilish materiallari e'lonlarini qabul qiluvchi Telegram bot.
 Oqim:
 /start -> [E'lon joylash] -> til -> kim sifatida (yuridik/jismoniy) -> telefon
 -> tashkilot -> batafsil ma'lumot -> narx -> standart/sertifikat
--> rasm (min. 3) yoki video -> miqdor -> yetkazib berish -> hudud
--> tekshirish (tasdiqlash / o'zgartirish) -> adminga yuborish (+ Google Sheets)
+-> rasm (min. 3) yoki video -> miqdor -> yetkazib berish -> hudud (14 ta tugma)
+-> tekshirish (tasdiqlash / bo'limni tanlab o'zgartirish) -> adminga yuborish (+ Google Sheets)
  
 Har bir savolga to'g'ri javob kelmaguncha keyingi savolga o'tilmaydi.
 """
@@ -103,6 +103,7 @@ class Form(StatesGroup):
     delivery = State()
     region = State()
     confirm = State()
+    edit_choice = State()
  
  
 # ---------------------------------------------------------------------------
@@ -161,7 +162,7 @@ TEXTS = {
         "ask_delivery": "🚚 <b>Yetkazib berish qanday amalga oshiriladi?</b>",
         "ask_region": (
             "📍 <b>Mahsulot qayerda joylashgan?</b>\n"
-            "Masalan: Toshkent shahri, Chilonzor tumani"
+            "Viloyatni tanlang 👇"
         ),
         # --- xatolik / ogohlantirish xabarlari ---
         "need_text": "⚠️ Iltimos, javobni matn ko'rinishida yozing.",
@@ -198,7 +199,7 @@ TEXTS = {
         # --- tasdiqlash ---
         "ad_title": "📝 <b>E'loningiz shakllantirilmoqda</b>",
         "confirm_ask": "Ma'lumotlar to'g'rimi? Tasdiqlang yoki o'zgartiring 👇",
-        "edit_restart": "✏️ Yaxshi, ma'lumotlarni boshidan qayta kiritamiz.",
+        "edit_menu": "✏️ <b>O'zgartirmoqchi bo'lgan bo'limingizni tanlang:</b>",
         "final": (
             "✅ <b>E'loningiz qabul qilindi!</b>\n"
             "🎉 E'loningiz muvaffaqiyatli tasdiqlandi va hozirda KARKAZ Telegram "
@@ -246,7 +247,7 @@ TEXTS = {
         "ask_delivery": "🚚 <b>Как осуществляется доставка?</b>",
         "ask_region": (
             "📍 <b>Где находится товар?</b>\n"
-            "Например: город Ташкент, Чиланзарский район"
+            "Выберите область 👇"
         ),
         "need_text": "⚠️ Пожалуйста, напишите ответ текстом.",
         "text_too_short": "⚠️ Ответ слишком короткий. Пожалуйста, напишите подробнее.",
@@ -281,7 +282,7 @@ TEXTS = {
         ),
         "ad_title": "📝 <b>Ваше объявление формируется</b>",
         "confirm_ask": "Данные верны? Подтвердите или измените 👇",
-        "edit_restart": "✏️ Хорошо, введём данные заново.",
+        "edit_menu": "✏️ <b>Выберите раздел, который хотите изменить:</b>",
         "final": (
             "✅ <b>Ваше объявление принято!</b>\n"
             "🎉 Ваше объявление успешно подтверждено и в настоящее время "
@@ -300,6 +301,23 @@ LABELS = {
             "included": "📦 Narxga kiritilgan",
             "contract": "🤝 Shartnoma asosida",
         },
+        "region": {
+            "tashkent_city": "Toshkent shahri",
+            "tashkent_region": "Toshkent viloyati",
+            "andijan": "Andijon viloyati",
+            "fergana": "Farg'ona viloyati",
+            "namangan": "Namangan viloyati",
+            "samarkand": "Samarqand viloyati",
+            "bukhara": "Buxoro viloyati",
+            "navoi": "Navoiy viloyati",
+            "jizzakh": "Jizzax viloyati",
+            "syrdarya": "Sirdaryo viloyati",
+            "kashkadarya": "Qashqadaryo viloyati",
+            "surkhandarya": "Surxondaryo viloyati",
+            "khorezm": "Xorazm viloyati",
+            "karakalpakstan": "Qoraqalpog'iston Resp.",
+        },
+        "back": "↩️ Orqaga",
         "done": "✅ Tayyor",
         "confirm_yes": "✅ Ha, tasdiqlayman",
         "confirm_edit": "✏️ O'zgartirish kiritaman",
@@ -312,6 +330,23 @@ LABELS = {
             "included": "📦 Включена в цену",
             "contract": "🤝 По договору",
         },
+        "region": {
+            "tashkent_city": "г. Ташкент",
+            "tashkent_region": "Ташкентская обл.",
+            "andijan": "Андижанская обл.",
+            "fergana": "Ферганская обл.",
+            "namangan": "Наманганская обл.",
+            "samarkand": "Самаркандская обл.",
+            "bukhara": "Бухарская обл.",
+            "navoi": "Навоийская обл.",
+            "jizzakh": "Джизакская обл.",
+            "syrdarya": "Сырдарьинская обл.",
+            "kashkadarya": "Кашкадарьинская обл.",
+            "surkhandarya": "Сурхандарьинская обл.",
+            "khorezm": "Хорезмская обл.",
+            "karakalpakstan": "Каракалпакстан",
+        },
+        "back": "↩️ Назад",
         "done": "✅ Готово",
         "confirm_yes": "✅ Да, подтверждаю",
         "confirm_edit": "✏️ Внести изменения",
@@ -330,6 +365,7 @@ SUMMARY = {
         "quantity": "📦 Miqdori",
         "delivery": "🚚 Yetkazib berish",
         "region": "📍 Hudud",
+        "media": "📸 Rasm/video",
         "photo_attached": "📷 rasm biriktirilgan",
     },
     "ru": {
@@ -342,6 +378,7 @@ SUMMARY = {
         "quantity": "📦 Количество",
         "delivery": "🚚 Доставка",
         "region": "📍 Регион",
+        "media": "📸 Фото/видео",
         "photo_attached": "📷 фото приложено",
     },
 }
@@ -384,11 +421,12 @@ def language_kb() -> InlineKeyboardMarkup:
     )
  
  
-def options_kb(lang: str, group: str, prefix: str) -> InlineKeyboardMarkup:
-    rows = [
-        [InlineKeyboardButton(text=label, callback_data=f"{prefix}:{code}")]
+def options_kb(lang: str, group: str, prefix: str, columns: int = 1) -> InlineKeyboardMarkup:
+    buttons = [
+        InlineKeyboardButton(text=label, callback_data=f"{prefix}:{code}")
         for code, label in LABELS[lang][group].items()
     ]
+    rows = [buttons[i:i + columns] for i in range(0, len(buttons), columns)]
     return InlineKeyboardMarkup(inline_keyboard=rows)
  
  
@@ -405,6 +443,32 @@ def confirm_kb(lang: str) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=LABELS[lang]["confirm_edit"], callback_data="confirm:edit")],
         ]
     )
+ 
+ 
+# tahrirlash menyusi: (callback kodi, holat, SUMMARY yorlig'i)
+EDIT_FIELDS = [
+    ("activity", Form.activity, "activity"),
+    ("phone", Form.phone, "phone"),
+    ("org_name", Form.org_name, "org"),
+    ("description", Form.description, "description"),
+    ("price", Form.price, "price"),
+    ("certificate", Form.certificate, "certificate"),
+    ("media", Form.media, "media"),
+    ("quantity", Form.quantity, "quantity"),
+    ("delivery", Form.delivery, "delivery"),
+    ("region", Form.region, "region"),
+]
+EDIT_STEPS = {code: step for code, step, _ in EDIT_FIELDS}
+ 
+ 
+def edit_kb(lang: str) -> InlineKeyboardMarkup:
+    buttons = [
+        InlineKeyboardButton(text=SUMMARY[lang][label], callback_data=f"edit:{code}")
+        for code, _, label in EDIT_FIELDS
+    ]
+    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    rows.append([InlineKeyboardButton(text=LABELS[lang]["back"], callback_data="edit:back")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
  
  
 def new_post_kb(lang: str) -> InlineKeyboardMarkup:
@@ -426,6 +490,11 @@ def get_lock(user_id: int) -> asyncio.Lock:
  
 def esc(value) -> str:
     return html.escape(str(value or ""), quote=False)
+ 
+ 
+def visible_len(text: str) -> int:
+    """Telegram caption chegarasi teglarsiz ko'rinadigan belgilarni sanaydi."""
+    return len(html.unescape(re.sub(r"<[^>]+>", "", text)))
  
  
 def count_words(text: str) -> int:
@@ -487,7 +556,6 @@ TEXT_KEYS = {
     Form.certificate.state: "ask_certificate",
     Form.media.state: "ask_media",
     Form.quantity.state: "ask_quantity",
-    Form.region.state: "ask_region",
 }
  
  
@@ -501,8 +569,21 @@ async def ask(target: Message, state: FSMContext, step: State, lang: str) -> Non
         await target.answer(T(lang, "ask_activity"), reply_markup=options_kb(lang, "activity", "act"))
     elif key == Form.delivery.state:
         await target.answer(T(lang, "ask_delivery"), reply_markup=options_kb(lang, "delivery", "deliv"))
+    elif key == Form.region.state:
+        await target.answer(T(lang, "ask_region"), reply_markup=options_kb(lang, "region", "reg", columns=2))
     else:
         await target.answer(T(lang, TEXT_KEYS[key]))
+ 
+ 
+async def advance(target: Message, state: FSMContext, next_step, lang: str) -> None:
+    """Javob qabul qilingach: oddiy rejimda keyingi savolga, tahrirlash rejimida
+    (yoki oxirgi savoldan keyin) yangilangan e'lonni ko'rsatishga o'tadi."""
+    data = await state.get_data()
+    if data.get("edit_mode") or next_step is None:
+        await state.update_data(edit_mode=False)
+        await show_confirmation(target, state, lang)
+    else:
+        await ask(target, state, next_step, lang)
  
  
 def cert_summary(data: dict, lang: str) -> str:
@@ -515,18 +596,18 @@ def cert_summary(data: dict, lang: str) -> str:
  
  
 def ad_lines(data: dict, lang: str) -> list:
-    """E'lon maydonlari (savollar tartibida)."""
+    """E'lon maydonlari (savollar tartibida). Maydon nomlari qalin (bold) yoziladi."""
     S, lab = SUMMARY[lang], LABELS[lang]
     return [
-        f"{S['activity']}: {lab['activity'][data['activity']]}",
-        f"{S['phone']}: {esc(data['phone'])}",
-        f"{S['org']}: {esc(data['org_name'])}",
-        f"{S['description']}: {esc(data['description'])}",
-        f"{S['price']}: {esc(data['price'])}",
-        f"{S['certificate']}: {cert_summary(data, lang)}",
-        f"{S['quantity']}: {esc(data['quantity'])}",
-        f"{S['delivery']}: {lab['delivery'][data['delivery']]}",
-        f"{S['region']}: {esc(data['region'])}",
+        f"<b>{S['activity']}:</b> {lab['activity'][data['activity']]}",
+        f"<b>{S['phone']}:</b> {esc(data['phone'])}",
+        f"<b>{S['org']}:</b> {esc(data['org_name'])}",
+        f"<b>{S['description']}:</b> {esc(data['description'])}",
+        f"<b>{S['price']}:</b> {esc(data['price'])}",
+        f"<b>{S['certificate']}:</b> {cert_summary(data, lang)}",
+        f"<b>{S['quantity']}:</b> {esc(data['quantity'])}",
+        f"<b>{S['delivery']}:</b> {lab['delivery'][data['delivery']]}",
+        f"<b>{S['region']}:</b> {lab['region'][data['region']]}",
     ]
  
  
@@ -579,7 +660,7 @@ async def send_ad(chat_id: int, text: str, data: dict) -> None:
     """E'lonni rasm/video BILAN BIRGA yuboradi.
     Matn 1024 belgidan oshmasa — rasm tagida (bitta xabar). Oshsa — albom, undan keyin matn."""
     has_media = bool(data.get("photos") or data.get("video"))
-    if has_media and len(text) <= CAPTION_LIMIT:
+    if has_media and visible_len(text) <= CAPTION_LIMIT:
         await send_media(chat_id, data, caption=text)
         return
     if has_media:
@@ -618,7 +699,7 @@ async def save_to_sheet(data: dict, user) -> None:
         "Ha" if data.get("video") else "Yo'q",
         data["quantity"],
         lab["delivery"][data["delivery"]],
-        data["region"],
+        lab["region"][data["region"]],
         username,
         str(user.id),
     ]
@@ -684,7 +765,7 @@ async def choose_activity(callback: CallbackQuery, state: FSMContext):
         return
     await state.update_data(activity=code)
     await mark_chosen(callback, LABELS[lang]["activity"][code])
-    await ask(callback.message, state, Form.phone, lang)
+    await advance(callback.message, state, Form.phone, lang)
     await callback.answer()
  
  
@@ -697,7 +778,20 @@ async def choose_delivery(callback: CallbackQuery, state: FSMContext):
         return
     await state.update_data(delivery=code)
     await mark_chosen(callback, LABELS[lang]["delivery"][code])
-    await ask(callback.message, state, Form.region, lang)
+    await advance(callback.message, state, Form.region, lang)
+    await callback.answer()
+ 
+ 
+@router.callback_query(Form.region, F.data.startswith("reg:"))
+async def choose_region(callback: CallbackQuery, state: FSMContext):
+    lang = (await state.get_data())["lang"]
+    code = callback.data.split(":", 1)[1]
+    if code not in LABELS[lang]["region"]:
+        await callback.answer()
+        return
+    await state.update_data(region=code)
+    await mark_chosen(callback, LABELS[lang]["region"][code])
+    await advance(callback.message, state, None, lang)
     await callback.answer()
  
  
@@ -708,7 +802,7 @@ async def choose_delivery(callback: CallbackQuery, state: FSMContext):
 async def get_phone_contact(message: Message, state: FSMContext):
     lang = (await state.get_data())["lang"]
     await state.update_data(phone=message.contact.phone_number)
-    await ask(message, state, Form.org_name, lang)
+    await advance(message, state, Form.org_name, lang)
  
  
 @router.message(Form.phone, F.text & ~F.text.startswith("/"))
@@ -719,7 +813,7 @@ async def get_phone(message: Message, state: FSMContext):
         await message.answer(T(lang, "phone_invalid"))
         return
     await state.update_data(phone=text)
-    await ask(message, state, Form.org_name, lang)
+    await advance(message, state, Form.org_name, lang)
  
  
 # ---------------------------------------------------------------------------
@@ -732,12 +826,11 @@ SHORT_TEXT_STEPS = {
     Form.org_name.state: ("org_name", Form.description),
     Form.price.state: ("price", Form.certificate),
     Form.quantity.state: ("quantity", Form.delivery),
-    Form.region.state: ("region", None),
 }
  
  
 @router.message(
-    StateFilter(Form.org_name, Form.price, Form.quantity, Form.region),
+    StateFilter(Form.org_name, Form.price, Form.quantity),
     TEXT_FILTER,
 )
 async def short_text_answer(message: Message, state: FSMContext):
@@ -751,10 +844,7 @@ async def short_text_answer(message: Message, state: FSMContext):
         return
     field, next_step = SHORT_TEXT_STEPS[await state.get_state()]
     await state.update_data(**{field: text})
-    if next_step is None:
-        await show_confirmation(message, state, lang)
-    else:
-        await ask(message, state, next_step, lang)
+    await advance(message, state, next_step, lang)
  
  
 @router.message(Form.description, TEXT_FILTER)
@@ -769,7 +859,7 @@ async def get_description(message: Message, state: FSMContext):
         await message.answer(T(lang, "desc_too_long", count=words))
         return
     await state.update_data(description=text)
-    await ask(message, state, Form.price, lang)
+    await advance(message, state, Form.price, lang)
  
  
 # --- standart / sertifikat: matn YOKI rasm majburiy ---
@@ -784,7 +874,7 @@ async def get_certificate_text(message: Message, state: FSMContext):
         await message.answer(T(lang, "text_too_long"))
         return
     await state.update_data(cert_text=text, cert_photo=None)
-    await ask(message, state, Form.media, lang)
+    await advance(message, state, Form.media, lang)
  
  
 @router.message(Form.certificate, F.photo)
@@ -792,7 +882,7 @@ async def get_certificate_photo(message: Message, state: FSMContext):
     lang = (await state.get_data())["lang"]
     caption = re.sub(r"\s+", " ", message.caption or "").strip()[:MAX_SHORT_CHARS]
     await state.update_data(cert_photo=message.photo[-1].file_id, cert_text=caption or None)
-    await ask(message, state, Form.media, lang)
+    await advance(message, state, Form.media, lang)
  
  
 @router.message(StateFilter(Form.certificate))
@@ -811,7 +901,7 @@ async def get_video(message: Message, state: FSMContext):
         lang = data["lang"]
         await state.update_data(video=message.video.file_id)
     await message.answer(T(lang, "media_video_ok"))
-    await ask(message, state, Form.quantity, lang)
+    await advance(message, state, Form.quantity, lang)
  
  
 @router.message(Form.media, F.photo)
@@ -858,7 +948,7 @@ async def media_done(callback: CallbackQuery, state: FSMContext):
             return
         await state.set_state(Form.quantity)  # ikki marta bosilishidan himoya
     await remove_buttons(callback)
-    await ask(callback.message, state, Form.quantity, lang)
+    await advance(callback.message, state, Form.quantity, lang)
     await callback.answer()
  
  
@@ -874,10 +964,38 @@ async def media_invalid(message: Message, state: FSMContext):
 @router.callback_query(Form.confirm, F.data == "confirm:edit")
 async def confirm_edit(callback: CallbackQuery, state: FSMContext):
     lang = (await state.get_data())["lang"]
-    await state.set_data({"lang": lang})  # tilni saqlab, qolganini tozalaymiz
     await remove_buttons(callback)
-    await callback.message.answer(T(lang, "edit_restart"))
-    await ask(callback.message, state, Form.activity, lang)
+    await state.set_state(Form.edit_choice)
+    await callback.message.answer(T(lang, "edit_menu"), reply_markup=edit_kb(lang))
+    await callback.answer()
+ 
+ 
+@router.callback_query(Form.edit_choice, F.data.startswith("edit:"))
+async def edit_choose(callback: CallbackQuery, state: FSMContext):
+    lang = (await state.get_data())["lang"]
+    code = callback.data.split(":", 1)[1]
+ 
+    if code == "back":  # hech narsani o'zgartirmasdan tasdiqlashga qaytish
+        await remove_buttons(callback)
+        await state.set_state(Form.confirm)
+        await callback.message.answer(T(lang, "confirm_ask"), reply_markup=confirm_kb(lang))
+        await callback.answer()
+        return
+ 
+    if code not in EDIT_STEPS:
+        await callback.answer()
+        return
+ 
+    label_key = next(lbl for c, _, lbl in EDIT_FIELDS if c == code)
+    await mark_chosen(callback, SUMMARY[lang][label_key])
+ 
+    updates = {"edit_mode": True}
+    if code == "media":  # rasm/video yangidan so'raladi
+        updates.update(photos=[], video=None, media_seq=0)
+    if code == "certificate":
+        updates.update(cert_text=None, cert_photo=None)
+    await state.update_data(**updates)
+    await ask(callback.message, state, EDIT_STEPS[code], lang)
     await callback.answer()
  
  
@@ -902,7 +1020,7 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
 # ---------------------------------------------------------------------------
 # TUGMA KUTILAYOTGAN BOSQICHLARDA MATN YOZILSA -> savolni qayta ko'rsatamiz
 # ---------------------------------------------------------------------------
-@router.message(StateFilter(Form.language, Form.activity, Form.delivery))
+@router.message(StateFilter(Form.language, Form.activity, Form.delivery, Form.region))
 async def button_expected(message: Message, state: FSMContext):
     current = await state.get_state()
     lang = (await state.get_data()).get("lang", "uz")
@@ -910,8 +1028,15 @@ async def button_expected(message: Message, state: FSMContext):
         Form.language.state: Form.language,
         Form.activity.state: Form.activity,
         Form.delivery.state: Form.delivery,
+        Form.region.state: Form.region,
     }[current]
     await ask(message, state, step, lang)
+ 
+ 
+@router.message(StateFilter(Form.edit_choice))
+async def edit_expected(message: Message, state: FSMContext):
+    lang = (await state.get_data())["lang"]
+    await message.answer(T(lang, "edit_menu"), reply_markup=edit_kb(lang))
  
  
 @router.message(StateFilter(Form.confirm))
@@ -926,7 +1051,7 @@ async def confirm_expected(message: Message, state: FSMContext):
 @router.message(
     StateFilter(
         Form.phone, Form.org_name, Form.description, Form.price,
-        Form.quantity, Form.region,
+        Form.quantity,
     )
 )
 async def text_expected(message: Message, state: FSMContext):
