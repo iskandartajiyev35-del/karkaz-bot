@@ -1,16 +1,16 @@
 """
 KARKAZ B2B Bot  (v3)
 Qurilish materiallari e'lonlarini qabul qiluvchi Telegram bot.
-
+ 
 Oqim:
 /start -> [E'lon joylash] -> til -> kim sifatida (yuridik/jismoniy) -> telefon
 -> tashkilot -> batafsil ma'lumot -> narx -> standart/sertifikat
 -> rasm (min. 3) yoki video -> miqdor -> yetkazib berish -> hudud
 -> tekshirish (tasdiqlash / o'zgartirish) -> adminga yuborish (+ Google Sheets)
-
+ 
 Har bir savolga to'g'ri javob kelmaguncha keyingi savolga o'tilmaydi.
 """
-
+ 
 import asyncio
 import html
 import json
@@ -18,10 +18,10 @@ import logging
 import os
 import re
 from datetime import datetime
-
+ 
 import gspread
 from google.oauth2.service_account import Credentials
-
+ 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
@@ -37,7 +37,7 @@ from aiogram.types import (
     InputMediaVideo,
     Message,
 )
-
+ 
 # ---------------------------------------------------------------------------
 # SOZLAMALAR (Railway -> Variables bo'limida kiritiladi)
 # ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
 GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS")  # ixtiyoriy
 SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")  # ixtiyoriy
-
+ 
 # Cheklovlar - kerak bo'lsa shu yerda o'zgartiring
 MIN_DESC_WORDS = 15      # batafsil ma'lumotdagi minimal so'z soni
 MAX_DESC_WORDS = 150     # maksimal so'z soni
@@ -54,16 +54,16 @@ MAX_SHORT_CHARS = 200    # qisqa javoblar (nom, narx, hudud...) uchun maksimal b
 MIN_PHOTOS = 3           # video bo'lmasa, kamida nechta rasm kerak
 MAX_PHOTOS = 10          # maksimal rasm soni
 CAPTION_LIMIT = 1024     # Telegram: rasm tagidagi matn chegarasi
-
+ 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
+ 
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN topilmadi! Railway'ning Variables bo'limiga qo'shing.")
 if not ADMIN_ID:
     raise RuntimeError("ADMIN_ID topilmadi! Railway'ning Variables bo'limiga qo'shing.")
 ADMIN_ID = int(ADMIN_ID)
-
+ 
 _sheet = None
 if GOOGLE_CREDENTIALS and SPREADSHEET_ID:
     try:
@@ -80,13 +80,13 @@ if GOOGLE_CREDENTIALS and SPREADSHEET_ID:
         logger.error("Google Sheetsga ulanishda xatolik: %s", e)
 else:
     logger.info("GOOGLE_CREDENTIALS yoki SPREADSHEET_ID kiritilmagan - Sheets o'chirilgan.")
-
+ 
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher(storage=MemoryStorage())
 router = Router()
 dp.include_router(router)
-
-
+ 
+ 
 # ---------------------------------------------------------------------------
 # HOLATLAR
 # ---------------------------------------------------------------------------
@@ -103,8 +103,8 @@ class Form(StatesGroup):
     delivery = State()
     region = State()
     confirm = State()
-
-
+ 
+ 
 # ---------------------------------------------------------------------------
 # MATNLAR (UZ / RU)
 # ---------------------------------------------------------------------------
@@ -114,12 +114,12 @@ WELCOME = (
     "🏗 <b>KARKAZ — B2B платформа для торговли</b>\n"
     "Товары для строительства и бизнеса в одном месте!"
 )
-
+ 
 ASK_LANGUAGE = (
     "🌐 <b>E'loningiz qaysi tilda bo'lishini xohlaysiz?</b>\n\n"
     "🌐 <b>На каком языке вы хотите разместить объявление?</b>"
 )
-
+ 
 TEXTS = {
     "uz": {
         "ask_activity": "🏢 <b>Siz kim sifatida faoliyat yuritasiz?</b>",
@@ -291,7 +291,7 @@ TEXTS = {
         "cancelled": "❌ Процесс отменён. Чтобы начать заново, нажмите /start.",
     },
 }
-
+ 
 LABELS = {
     "uz": {
         "activity": {"legal": "🏛️ Yuridik shaxs", "individual": "👤 Jismoniy shaxs"},
@@ -318,7 +318,7 @@ LABELS = {
         "new_post": "📢 Разместить ещё объявление",
     },
 }
-
+ 
 SUMMARY = {
     "uz": {
         "activity": "🏢 Faoliyat turi",
@@ -345,8 +345,8 @@ SUMMARY = {
         "photo_attached": "📷 фото приложено",
     },
 }
-
-
+ 
+ 
 def T(lang: str, key: str, **kw) -> str:
     """Matnni oladi va umumiy cheklovlarni joyiga qo'yadi."""
     return TEXTS[lang][key].format(
@@ -357,8 +357,8 @@ def T(lang: str, key: str, **kw) -> str:
         max_chars=MAX_SHORT_CHARS,
         **kw,
     )
-
-
+ 
+ 
 # ---------------------------------------------------------------------------
 # KLAVIATURALAR
 # ---------------------------------------------------------------------------
@@ -371,8 +371,8 @@ def start_kb() -> InlineKeyboardMarkup:
             )]
         ]
     )
-
-
+ 
+ 
 def language_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -382,22 +382,22 @@ def language_kb() -> InlineKeyboardMarkup:
             ]
         ]
     )
-
-
+ 
+ 
 def options_kb(lang: str, group: str, prefix: str) -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton(text=label, callback_data=f"{prefix}:{code}")]
         for code, label in LABELS[lang][group].items()
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
+ 
+ 
 def done_kb(lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text=LABELS[lang]["done"], callback_data="media_done")]]
     )
-
-
+ 
+ 
 def confirm_kb(lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -405,40 +405,40 @@ def confirm_kb(lang: str) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=LABELS[lang]["confirm_edit"], callback_data="confirm:edit")],
         ]
     )
-
-
+ 
+ 
 def new_post_kb(lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text=LABELS[lang]["new_post"], callback_data="start_post")]]
     )
-
-
+ 
+ 
 # ---------------------------------------------------------------------------
 # YORDAMCHI FUNKSIYALAR
 # ---------------------------------------------------------------------------
 _locks: dict = {}
-
-
+ 
+ 
 def get_lock(user_id: int) -> asyncio.Lock:
     """Bir foydalanuvchining bir vaqtda kelgan xabarlari (masalan albom) bir-biriga xalaqit bermasligi uchun."""
     return _locks.setdefault(user_id, asyncio.Lock())
-
-
+ 
+ 
 def esc(value) -> str:
     return html.escape(str(value or ""), quote=False)
-
-
+ 
+ 
 def count_words(text: str) -> int:
     return len(text.split())
-
-
+ 
+ 
 def is_valid_phone(text: str) -> bool:
     if not re.fullmatch(r"[+\d\s()\-]+", text):
         return False
     digits = re.sub(r"\D", "", text)
     return 9 <= len(digits) <= 13
-
-
+ 
+ 
 def split_text(text: str, limit: int = 3900) -> list:
     """Telegram 4096 belgi chegarasidan oshib ketmasligi uchun qatorlar bo'yicha bo'ladi."""
     if len(text) <= limit:
@@ -459,8 +459,8 @@ def split_text(text: str, limit: int = 3900) -> list:
     if current:
         chunks.append(current)
     return chunks
-
-
+ 
+ 
 async def mark_chosen(callback: CallbackQuery, label: str) -> None:
     """Bosilgan tugmalarni olib tashlab, tanlovni xabar tagiga yozib qo'yadi."""
     try:
@@ -470,15 +470,15 @@ async def mark_chosen(callback: CallbackQuery, label: str) -> None:
         )
     except Exception as e:
         logger.debug("mark_chosen: %s", e)
-
-
+ 
+ 
 async def remove_buttons(callback: CallbackQuery) -> None:
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
     except Exception as e:
         logger.debug("remove_buttons: %s", e)
-
-
+ 
+ 
 TEXT_KEYS = {
     Form.phone.state: "ask_phone",
     Form.org_name.state: "ask_org",
@@ -489,8 +489,8 @@ TEXT_KEYS = {
     Form.quantity.state: "ask_quantity",
     Form.region.state: "ask_region",
 }
-
-
+ 
+ 
 async def ask(target: Message, state: FSMContext, step: State, lang: str) -> None:
     """Berilgan bosqichga o'tkazadi va shu bosqich savolini yuboradi."""
     await state.set_state(step)
@@ -503,8 +503,8 @@ async def ask(target: Message, state: FSMContext, step: State, lang: str) -> Non
         await target.answer(T(lang, "ask_delivery"), reply_markup=options_kb(lang, "delivery", "deliv"))
     else:
         await target.answer(T(lang, TEXT_KEYS[key]))
-
-
+ 
+ 
 def cert_summary(data: dict, lang: str) -> str:
     parts = []
     if data.get("cert_text"):
@@ -512,8 +512,8 @@ def cert_summary(data: dict, lang: str) -> str:
     if data.get("cert_photo"):
         parts.append(SUMMARY[lang]["photo_attached"])
     return " + ".join(parts) or "—"
-
-
+ 
+ 
 def ad_lines(data: dict, lang: str) -> list:
     """E'lon maydonlari (savollar tartibida)."""
     S, lab = SUMMARY[lang], LABELS[lang]
@@ -528,13 +528,13 @@ def ad_lines(data: dict, lang: str) -> list:
         f"{S['delivery']}: {lab['delivery'][data['delivery']]}",
         f"{S['region']}: {esc(data['region'])}",
     ]
-
-
+ 
+ 
 def build_summary(data: dict, lang: str) -> str:
     """Foydalanuvchiga ko'rsatiladigan e'lon (tepada: 'E'loningiz shakllantirilmoqda')."""
     return "\n".join([T(lang, "ad_title"), ""] + ad_lines(data, lang))
-
-
+ 
+ 
 def build_admin_text(data: dict, user) -> str:
     """Admin uchun ariza matni (doim o'zbek tilida)."""
     username = f"@{user.username}" if user.username else "username yo'q"
@@ -550,8 +550,8 @@ def build_admin_text(data: dict, user) -> str:
             f"👤 {esc(user.full_name)} | {esc(username)} | ID: <code>{user.id}</code>",
         ]
     )
-
-
+ 
+ 
 async def send_media(chat_id: int, data: dict, caption: str = None) -> None:
     """Rasm/videolarni albom qilib yuboradi; caption birinchi elementga qo'yiladi."""
     items = [("photo", f) for f in data.get("photos", [])]
@@ -573,8 +573,8 @@ async def send_media(chat_id: int, data: dict, caption: str = None) -> None:
                 cls = InputMediaPhoto if kind == "photo" else InputMediaVideo
                 media.append(cls(media=fid, caption=c, parse_mode=ParseMode.HTML))
             await bot.send_media_group(chat_id, media)
-
-
+ 
+ 
 async def send_ad(chat_id: int, text: str, data: dict) -> None:
     """E'lonni rasm/video BILAN BIRGA yuboradi.
     Matn 1024 belgidan oshmasa — rasm tagida (bitta xabar). Oshsa — albom, undan keyin matn."""
@@ -586,8 +586,8 @@ async def send_ad(chat_id: int, text: str, data: dict) -> None:
         await send_media(chat_id, data)
     for chunk in split_text(text):
         await bot.send_message(chat_id, chunk)
-
-
+ 
+ 
 async def deliver_to_admin(data: dict, user) -> None:
     """Arizani (rasm/video + matn birga, so'ng sertifikat rasmi) adminga yuboradi."""
     try:
@@ -596,8 +596,8 @@ async def deliver_to_admin(data: dict, user) -> None:
             await bot.send_photo(ADMIN_ID, data["cert_photo"], caption="📜 Standart / sertifikat rasmi")
     except Exception as e:
         logger.error("Adminga yuborishda xatolik: %s", e)
-
-
+ 
+ 
 async def save_to_sheet(data: dict, user) -> None:
     """Arizani Google Sheets jadvaliga yozadi (agar ulangan bo'lsa)."""
     if _sheet is None:
@@ -626,16 +626,16 @@ async def save_to_sheet(data: dict, user) -> None:
         await asyncio.to_thread(_sheet.append_row, row, value_input_option="RAW")
     except Exception as e:
         logger.error("Google Sheetsga yozishda xatolik: %s", e)
-
-
+ 
+ 
 async def show_confirmation(target: Message, state: FSMContext, lang: str) -> None:
     """E'lonni rasm/video bilan birga ko'rsatadi, so'ng tasdiqlash tugmalarini chiqaradi."""
     data = await state.get_data()
     await state.set_state(Form.confirm)
     await send_ad(target.chat.id, build_summary(data, lang), data)
     await target.answer(T(lang, "confirm_ask"), reply_markup=confirm_kb(lang))
-
-
+ 
+ 
 # ---------------------------------------------------------------------------
 # BUYRUQLAR: /start va /cancel (istalgan paytda ishlaydi)
 # ---------------------------------------------------------------------------
@@ -643,23 +643,23 @@ async def show_confirmation(target: Message, state: FSMContext, lang: str) -> No
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(WELCOME, reply_markup=start_kb())
-
-
+ 
+ 
 @router.message(Command("cancel"))
 async def cmd_cancel(message: Message, state: FSMContext):
     lang = (await state.get_data()).get("lang", "uz")
     await state.clear()
     await message.answer(T(lang, "cancelled"), reply_markup=start_kb())
-
-
+ 
+ 
 @router.callback_query(F.data == "start_post")
 async def start_post(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await remove_buttons(callback)
     await ask(callback.message, state, Form.language, "uz")
     await callback.answer()
-
-
+ 
+ 
 # ---------------------------------------------------------------------------
 # TUGMALI BOSQICHLAR
 # ---------------------------------------------------------------------------
@@ -673,8 +673,8 @@ async def choose_language(callback: CallbackQuery, state: FSMContext):
     await mark_chosen(callback, "UZB tili" if lang == "uz" else "Rus tili / Русский")
     await ask(callback.message, state, Form.activity, lang)
     await callback.answer()
-
-
+ 
+ 
 @router.callback_query(Form.activity, F.data.startswith("act:"))
 async def choose_activity(callback: CallbackQuery, state: FSMContext):
     lang = (await state.get_data())["lang"]
@@ -686,8 +686,8 @@ async def choose_activity(callback: CallbackQuery, state: FSMContext):
     await mark_chosen(callback, LABELS[lang]["activity"][code])
     await ask(callback.message, state, Form.phone, lang)
     await callback.answer()
-
-
+ 
+ 
 @router.callback_query(Form.delivery, F.data.startswith("deliv:"))
 async def choose_delivery(callback: CallbackQuery, state: FSMContext):
     lang = (await state.get_data())["lang"]
@@ -699,8 +699,8 @@ async def choose_delivery(callback: CallbackQuery, state: FSMContext):
     await mark_chosen(callback, LABELS[lang]["delivery"][code])
     await ask(callback.message, state, Form.region, lang)
     await callback.answer()
-
-
+ 
+ 
 # ---------------------------------------------------------------------------
 # TELEFON (2-savol)
 # ---------------------------------------------------------------------------
@@ -709,8 +709,8 @@ async def get_phone_contact(message: Message, state: FSMContext):
     lang = (await state.get_data())["lang"]
     await state.update_data(phone=message.contact.phone_number)
     await ask(message, state, Form.org_name, lang)
-
-
+ 
+ 
 @router.message(Form.phone, F.text & ~F.text.startswith("/"))
 async def get_phone(message: Message, state: FSMContext):
     lang = (await state.get_data())["lang"]
@@ -720,13 +720,13 @@ async def get_phone(message: Message, state: FSMContext):
         return
     await state.update_data(phone=text)
     await ask(message, state, Form.org_name, lang)
-
-
+ 
+ 
 # ---------------------------------------------------------------------------
 # QISQA MATNLI BOSQICHLAR
 # ---------------------------------------------------------------------------
 TEXT_FILTER = F.text & ~F.text.startswith("/")
-
+ 
 # holat -> (saqlanadigan maydon, keyingi bosqich; None = tasdiqlashga)
 SHORT_TEXT_STEPS = {
     Form.org_name.state: ("org_name", Form.description),
@@ -734,8 +734,8 @@ SHORT_TEXT_STEPS = {
     Form.quantity.state: ("quantity", Form.delivery),
     Form.region.state: ("region", None),
 }
-
-
+ 
+ 
 @router.message(
     StateFilter(Form.org_name, Form.price, Form.quantity, Form.region),
     TEXT_FILTER,
@@ -755,8 +755,8 @@ async def short_text_answer(message: Message, state: FSMContext):
         await show_confirmation(message, state, lang)
     else:
         await ask(message, state, next_step, lang)
-
-
+ 
+ 
 @router.message(Form.description, TEXT_FILTER)
 async def get_description(message: Message, state: FSMContext):
     lang = (await state.get_data())["lang"]
@@ -770,8 +770,8 @@ async def get_description(message: Message, state: FSMContext):
         return
     await state.update_data(description=text)
     await ask(message, state, Form.price, lang)
-
-
+ 
+ 
 # --- standart / sertifikat: matn YOKI rasm majburiy ---
 @router.message(Form.certificate, TEXT_FILTER)
 async def get_certificate_text(message: Message, state: FSMContext):
@@ -785,22 +785,22 @@ async def get_certificate_text(message: Message, state: FSMContext):
         return
     await state.update_data(cert_text=text, cert_photo=None)
     await ask(message, state, Form.media, lang)
-
-
+ 
+ 
 @router.message(Form.certificate, F.photo)
 async def get_certificate_photo(message: Message, state: FSMContext):
     lang = (await state.get_data())["lang"]
     caption = re.sub(r"\s+", " ", message.caption or "").strip()[:MAX_SHORT_CHARS]
     await state.update_data(cert_photo=message.photo[-1].file_id, cert_text=caption or None)
     await ask(message, state, Form.media, lang)
-
-
+ 
+ 
 @router.message(StateFilter(Form.certificate))
 async def certificate_invalid(message: Message, state: FSMContext):
     lang = (await state.get_data())["lang"]
     await message.answer(T(lang, "cert_invalid"))
-
-
+ 
+ 
 # --- rasm (kamida MIN_PHOTOS ta) yoki video: majburiy ---
 @router.message(Form.media, F.video)
 async def get_video(message: Message, state: FSMContext):
@@ -812,8 +812,8 @@ async def get_video(message: Message, state: FSMContext):
         await state.update_data(video=message.video.file_id)
     await message.answer(T(lang, "media_video_ok"))
     await ask(message, state, Form.quantity, lang)
-
-
+ 
+ 
 @router.message(Form.media, F.photo)
 async def get_photo(message: Message, state: FSMContext):
     async with get_lock(message.from_user.id):
@@ -824,14 +824,14 @@ async def get_photo(message: Message, state: FSMContext):
             photos.append(message.photo[-1].file_id)
         seq = data.get("media_seq", 0) + 1
         await state.update_data(photos=photos, media_seq=seq)
-
+ 
     # Albom yuborilganda har bir rasmga alohida javob bermaslik uchun biroz kutamiz:
     # faqat eng oxirgi kelgan rasm holat xabarini yuboradi.
     await asyncio.sleep(1.2)
     data = await state.get_data()
     if data.get("media_seq") != seq or await state.get_state() != Form.media.state:
         return
-
+ 
     count = len(data.get("photos", []))
     if count >= MIN_PHOTOS:
         text = T(lang, "media_enough", count=count)
@@ -840,8 +840,8 @@ async def get_photo(message: Message, state: FSMContext):
         await message.answer(text, reply_markup=done_kb(lang))
     else:
         await message.answer(T(lang, "media_need_more", count=count, left=MIN_PHOTOS - count))
-
-
+ 
+ 
 @router.callback_query(Form.media, F.data == "media_done")
 async def media_done(callback: CallbackQuery, state: FSMContext):
     async with get_lock(callback.from_user.id):
@@ -860,14 +860,14 @@ async def media_done(callback: CallbackQuery, state: FSMContext):
     await remove_buttons(callback)
     await ask(callback.message, state, Form.quantity, lang)
     await callback.answer()
-
-
+ 
+ 
 @router.message(StateFilter(Form.media))
 async def media_invalid(message: Message, state: FSMContext):
     lang = (await state.get_data())["lang"]
     await message.answer(T(lang, "media_invalid"))
-
-
+ 
+ 
 # ---------------------------------------------------------------------------
 # TASDIQLASH
 # ---------------------------------------------------------------------------
@@ -879,8 +879,8 @@ async def confirm_edit(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(T(lang, "edit_restart"))
     await ask(callback.message, state, Form.activity, lang)
     await callback.answer()
-
-
+ 
+ 
 @router.callback_query(Form.confirm, F.data == "confirm:yes")
 async def confirm_yes(callback: CallbackQuery, state: FSMContext):
     async with get_lock(callback.from_user.id):
@@ -889,16 +889,16 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
             return
         data = await state.get_data()
         await state.clear()  # ikki marta bosilsa, ariza ikki marta ketmaydi
-
+ 
     lang = data["lang"]
     await remove_buttons(callback)
     await callback.message.answer(T(lang, "final"), reply_markup=new_post_kb(lang))
     await callback.answer()
-
+ 
     await deliver_to_admin(data, callback.from_user)
     await save_to_sheet(data, callback.from_user)
-
-
+ 
+ 
 # ---------------------------------------------------------------------------
 # TUGMA KUTILAYOTGAN BOSQICHLARDA MATN YOZILSA -> savolni qayta ko'rsatamiz
 # ---------------------------------------------------------------------------
@@ -912,14 +912,14 @@ async def button_expected(message: Message, state: FSMContext):
         Form.delivery.state: Form.delivery,
     }[current]
     await ask(message, state, step, lang)
-
-
+ 
+ 
 @router.message(StateFilter(Form.confirm))
 async def confirm_expected(message: Message, state: FSMContext):
     lang = (await state.get_data())["lang"]
     await message.answer(T(lang, "confirm_ask"), reply_markup=confirm_kb(lang))
-
-
+ 
+ 
 # ---------------------------------------------------------------------------
 # MATN KUTILAYOTGAN BOSQICHLARDA MATN BO'LMAGAN NARSA YUBORILSA
 # ---------------------------------------------------------------------------
@@ -932,20 +932,20 @@ async def confirm_expected(message: Message, state: FSMContext):
 async def text_expected(message: Message, state: FSMContext):
     lang = (await state.get_data())["lang"]
     await message.answer(T(lang, "need_text"))
-
-
+ 
+ 
 # Holatga mos kelmagan eski tugmalar bosilsa - jim "yuklanmoqda"ni to'xtatamiz
 @router.callback_query()
 async def stale_callback(callback: CallbackQuery):
     await callback.answer()
-
-
+ 
+ 
 # Holatsiz (masalan bot qayta ishga tushgandan keyin) kelgan xabarlar
 @router.message()
 async def no_state_message(message: Message, state: FSMContext):
     await message.answer(WELCOME, reply_markup=start_kb())
-
-
+ 
+ 
 # ---------------------------------------------------------------------------
 # ISHGA TUSHIRISH
 # ---------------------------------------------------------------------------
@@ -953,7 +953,8 @@ async def main() -> None:
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info("Bot ishga tushdi...")
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
-
-
+ 
+ 
 if __name__ == "__main__":
     asyncio.run(main())
+ 
