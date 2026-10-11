@@ -1,12 +1,11 @@
 """
-KARKAZ B2B Bot  (v2)
+KARKAZ B2B Bot  (v3)
 Qurilish materiallari e'lonlarini qabul qiluvchi Telegram bot.
  
 Oqim:
-/start -> [E'lon joylash] -> til -> faoliyat turi -> faoliyat sifati
--> tashkilot -> brend/marka -> batafsil ma'lumot (min. so'z)
--> narx -> standart/sertifikat (matn yoki rasm) -> rasm (min. 3) yoki video
--> miqdor -> yetkazib berish -> hudud -> telefon
+/start -> [E'lon joylash] -> til -> kim sifatida (yuridik/jismoniy) -> telefon
+-> tashkilot -> batafsil ma'lumot -> narx -> standart/sertifikat
+-> rasm (min. 3) yoki video -> miqdor -> yetkazib berish -> hudud
 -> tekshirish (tasdiqlash / o'zgartirish) -> adminga yuborish (+ Google Sheets)
  
 Har bir savolga to'g'ri javob kelmaguncha keyingi savolga o'tilmaydi.
@@ -35,6 +34,7 @@ from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     InputMediaPhoto,
+    InputMediaVideo,
     Message,
 )
  
@@ -53,6 +53,7 @@ MAX_DESC_CHARS = 2000    # maksimal belgi soni (himoya uchun)
 MAX_SHORT_CHARS = 200    # qisqa javoblar (nom, narx, hudud...) uchun maksimal belgi
 MIN_PHOTOS = 3           # video bo'lmasa, kamida nechta rasm kerak
 MAX_PHOTOS = 10          # maksimal rasm soni
+CAPTION_LIMIT = 1024     # Telegram: rasm tagidagi matn chegarasi
  
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -92,9 +93,8 @@ dp.include_router(router)
 class Form(StatesGroup):
     language = State()
     activity = State()
-    role = State()
+    phone = State()
     org_name = State()
-    brand = State()
     description = State()
     price = State()
     certificate = State()
@@ -102,7 +102,6 @@ class Form(StatesGroup):
     quantity = State()
     delivery = State()
     region = State()
-    phone = State()
     confirm = State()
  
  
@@ -111,115 +110,58 @@ class Form(StatesGroup):
 # ---------------------------------------------------------------------------
 WELCOME = (
     "🏗 <b>KARKAZ — B2B savdo platformasi</b>\n"
-    "Qurilish va biznes uchun mahsulotlar bir joyda!\n"
-    "📦 Mahsulotingizni tez va oson sotish uchun e'lon joylashtiring.\n\n"
+    "Qurilish va biznes uchun mahsulotlar bir joyda!\n\n"
     "🏗 <b>KARKAZ — B2B платформа для торговли</b>\n"
-    "Товары для строительства и бизнеса в одном месте!\n"
-    "📦 Разместите объявление, чтобы быстро и легко продать свой товар.\n\n"
-    "☎️ +998 90 111 60 06\n\n"
-    "👇"
+    "Товары для строительства и бизнеса в одном месте!"
 )
  
 ASK_LANGUAGE = (
-    "🌐 <b>E'loningiz qaysi tilda bo'lishini xohlaysiz?</b>\n"
-    "📢 Iltimos, e'loningiz uchun qulay bo'lgan tilni tanlang. Tanlangan til "
-    "asosida e'loningizni joylashtirishni davom ettiramiz. 👇\n\n"
-    "— — — — — — — —\n\n"
-    "🌐 <b>На каком языке вы хотите разместить объявление?</b>\n"
-    "📢 Пожалуйста, выберите удобный язык для вашего объявления. Мы продолжим "
-    "размещение объявления на выбранном языке. 👇"
+    "🌐 <b>E'loningiz qaysi tilda bo'lishini xohlaysiz?</b>\n\n"
+    "🌐 <b>На каком языке вы хотите разместить объявление?</b>"
 )
  
 TEXTS = {
     "uz": {
-        "ask_activity": (
-            "🏢 <b>Iltimos, faoliyat turini tanlang!</b>\n"
-            "🤝 KARKAZ platformasida e'lon joylashtirishni davom ettirish uchun "
-            "quyidagi variantlardan birini tanlang:\n\n"
-            "🏛️ <b>Yuridik shaxs</b> — korxona, firma yoki tashkilot nomidan "
-            "faoliyat yurituvchi tadbirkor.\n"
-            "👤 <b>Jismoniy shaxs</b> — o'z nomidan mahsulot sotuvchi yoki e'lon "
-            "joylashtiruvchi shaxs."
-        ),
-        "ask_role": (
-            "🏭 <b>Siz kim sifatida faoliyat yuritasiz?</b>\n"
-            "📦 Mahsulotingizni KARKAZ platformasida joylashtirish uchun quyidagi "
-            "variantlardan birini tanlang:\n\n"
-            "🏭 <b>Ishlab chiqaruvchi</b> — mahsulotlarni o'zingiz ishlab chiqarasiz.\n"
-            "🤝 <b>Diler</b> — ishlab chiqaruvchilardan yoki yetkazib beruvchilardan "
-            "mahsulot olib, xaridorlarga sotasiz."
+        "ask_activity": "🏢 <b>Siz kim sifatida faoliyat yuritasiz?</b>",
+        "ask_phone": (
+            "📞 <b>Telefon raqamingizni kiriting</b>\n"
+            "Masalan: +998 90 123 45 67"
         ),
         "ask_org": (
-            "🏢 <b>Tashkilotingiz nomini kiriting</b>\n\n"
-            "Korxonangiz, kompaniyangiz yoki savdo faoliyatingiz nomini kiriting.\n"
-            "Masalan: “Tashkent Build Trade” MChJ"
-        ),
-        "ask_brand": (
-            "🏷️ <b>Mahsulotning brendi va markasini kiriting</b>\n"
-            "📌 Qurilish materialining ishlab chiqaruvchi brendi, markasi va "
-            "modelini ko'rsating.\n"
-            "Misol: M400 markali sement, ishlab chiqaruvchi — Qizilqumsement."
+            "🏢 <b>Tashkilotingiz nomini kiriting</b>\n"
+            "Masalan: Tadjiyev Grup Management"
         ),
         "ask_description": (
             "📝 <b>Mahsulot haqida batafsil ma'lumot kiriting</b>\n"
-            "📦 Mahsulotning nima uchun ishlatilishi, o'lchami, tarkibi va texnik "
-            "xususiyatlari haqida kamida {min} ta, ko'pi bilan {max} ta so'z bilan "
-            "ma'lumot bering.\n"
+            "📦 Mahsulotning nima uchun ishlatilishi, o'lchami, tarkibi, brendi va "
+            "texnik xususiyatlari haqida kamida {min} ta, ko'pi bilan {max} ta so'z "
+            "bilan ma'lumot bering.\n"
             "ℹ️ Ma'lumot aniq va tushunarli bo'lishi kerak. Bu xaridorlarga "
             "mahsulotni yaxshiroq tushunish va to'g'ri tanlashga yordam beradi."
         ),
         "ask_price": (
-            "🧱 <b>Qurilish materialining narxini kiriting</b>\n"
-            "Sotuvga qo'yilayotgan mahsulotning narxini va o'lchov birligini ko'rsating.\n"
-            "Masalan: 1 tonna sement — 850 000 so'm yoki 1 dona g'isht — 1 200 so'm."
+            "🧱 <b>Narxini kiriting</b>\n"
+            "Narx va o'lchov birligini yozing.\n"
+            "Masalan: 1 tonna sement — 850 000 so'm"
         ),
         "ask_certificate": (
-            "📜 <b>Mahsulotning standart yoki sertifikat raqamini kiriting</b>\n"
-            "🏗️ Mahsulotingizga tegishli standart (GOST, O'z DSt va boshqalar) yoki "
-            "muvofiqlik sertifikati raqamini kiriting.\n"
-            "📝 Misol: GOST 31108-2020 yoki sertifikat raqami: UZ.SMT.12345.\n"
-            "ℹ️ Agar mahsulotda sertifikat yoki standart mavjud bo'lmasa, "
-            "«Mavjud emas» deb yozishingiz mumkin.\n\n"
-            "📷 Raqamni matn ko'rinishida yozishingiz yoki sertifikat rasmini "
-            "yuborishingiz mumkin."
+            "📜 <b>Standart yoki sertifikat raqamini kiriting</b>\n"
+            "Masalan: GOST 31108-2020\n"
+            "Yo'q bo'lsa — «Mavjud emas» deb yozing. Sertifikat rasmini ham yuborishingiz mumkin."
         ),
         "ask_media": (
-            "📸 <b>Mahsulotingizning rasmlarini yoki videosini yuklang</b>\n"
-            "🏗️ Xaridorlar mahsulotingizni yaxshiroq ko'rishlari uchun uning "
-            "sifatli va aniq tasvirlarini yuboring.\n"
-            "📷 <b>Rasm:</b> kamida {min_photos} ta mahsulot rasmi yuborilishi shart.\n"
-            "🎥 <b>Video:</b> xohlasangiz, rasmlar o'rniga mahsulotingiz aks etgan "
-            "videoni yuborishingiz mumkin.\n"
-            "⚠️ Rasmlar yoki video aniq, sifatli va aynan sotilayotgan mahsulotga "
-            "tegishli bo'lishi kerak.\n\n"
-            "👇 Rasmlarni yuboring (hammasini yuborgach «Tayyor» tugmasi chiqadi) "
-            "yoki bitta video yuboring."
+            "📸 <b>Mahsulot rasmlari yoki videosini yuboring</b>\n"
+            "📷 Kamida {min_photos} ta rasm yoki 🎥 1 ta video.\n"
+            "Rasmlar aniq va aynan shu mahsulotga tegishli bo'lsin."
         ),
         "ask_quantity": (
-            "📦 <b>Mahsulotingizdan qancha miqdorda mavjud?</b>\n"
-            "🏗️ Sotuvga taklif qilayotgan qurilish materialingizning hozirgi mavjud "
-            "miqdorini va o'lchov birligini kiriting.\n"
-            "📝 Misol: 50 tonna sement, 10 000 dona g'isht yoki 2 500 m² penoplast.\n"
-            "ℹ️ Iltimos, xaridorlar uchun aniq va dolzarb miqdorni ko'rsating."
+            "📦 <b>Qancha miqdorda mavjud?</b>\n"
+            "Masalan: 50 tonna, 10 000 dona, 2 500 m²"
         ),
-        "ask_delivery": (
-            "🚚 <b>Yetkazib berish xizmati qanday amalga oshiriladi?</b>\n"
-            "📦 Xaridor mahsulotni qanday usulda yetkazib olishini tanlang. Iltimos, "
-            "buyurtma bo'yicha yetkazib berish shartlariga mos variantni belgilang."
-        ),
+        "ask_delivery": "🚚 <b>Yetkazib berish qanday amalga oshiriladi?</b>",
         "ask_region": (
-            "📍 <b>Mahsulotingiz joylashgan hududni kiriting</b>\n"
-            "🏗️ Mahsulotingiz ayni vaqtda qaysi viloyat, shahar yoki tumanda "
-            "joylashganini ko'rsating. Bu xaridorlarga mahsulotning joylashuvini "
-            "aniqlash va yetkazib berishni rejalashtirishda yordam beradi.\n"
-            "📝 Misol: Toshkent shahri, Chilonzor tumani yoki Toshkent viloyati, "
-            "Zangiota tumani.\n"
-            "👇 Iltimos, mahsulotingiz joylashgan hududni aniq kiriting."
-        ),
-        "ask_phone": (
-            "📞 <b>Bog'lanish uchun telefon raqamingizni kiriting</b>\n"
-            "Xaridorlar siz bilan bog'lanishi uchun faol telefon raqamingizni yozing.\n"
-            "Masalan: +998 90 123 45 67"
+            "📍 <b>Mahsulot qayerda joylashgan?</b>\n"
+            "Masalan: Toshkent shahri, Chilonzor tumani"
         ),
         # --- xatolik / ogohlantirish xabarlari ---
         "need_text": "⚠️ Iltimos, javobni matn ko'rinishida yozing.",
@@ -253,18 +195,9 @@ TEXTS = {
             "⚠️ Telefon raqami noto'g'ri. Iltimos, to'g'ri formatda kiriting.\n"
             "Masalan: +998 90 123 45 67"
         ),
-        "need_button": "👆 Iltimos, quyidagi tugmalardan birini tanlang:",
         # --- tasdiqlash ---
-        "confirm_header": (
-            "✅ <b>E'loningiz qabul qilindi!</b>\n"
-            "🎉 KARKAZ platformasiga e'lon joylashtirish jarayoni yakunlandi. "
-            "E'loningiz moderator tomonidan ko'rib chiqilmoqda.\n"
-            "🔎 Moderator e'loningizni tekshiradi va belgilangan talablarga "
-            "muvofiqligini baholaydi. Tasdiqlanganidan so'ng e'loningiz platformada "
-            "joylashtiriladi.\n"
-            "📋 Kiritilgan ma'lumotlarni tekshirib chiqing. Barchasi to'g'ri bo'lsa, "
-            "tasdiqlang yoki kerakli o'zgartirishlarni kiriting."
-        ),
+        "ad_title": "📝 <b>E'loningiz shakllantirilmoqda</b>",
+        "confirm_ask": "Ma'lumotlar to'g'rimi? Tasdiqlang yoki o'zgartiring 👇",
         "edit_restart": "✏️ Yaxshi, ma'lumotlarni boshidan qayta kiritamiz.",
         "final": (
             "✅ <b>E'loningiz qabul qilindi!</b>\n"
@@ -275,91 +208,45 @@ TEXTS = {
         "cancelled": "❌ Jarayon bekor qilindi. Qaytadan boshlash uchun /start bosing.",
     },
     "ru": {
-        "ask_activity": (
-            "🏢 <b>Пожалуйста, выберите вид деятельности!</b>\n"
-            "🤝 Чтобы продолжить размещение объявления на платформе KARKAZ, "
-            "выберите один из вариантов:\n\n"
-            "🏛️ <b>Юридическое лицо</b> — предприниматель, действующий от имени "
-            "предприятия, фирмы или организации.\n"
-            "👤 <b>Физическое лицо</b> — лицо, продающее товар или размещающее "
-            "объявление от своего имени."
-        ),
-        "ask_role": (
-            "🏭 <b>В каком качестве вы осуществляете деятельность?</b>\n"
-            "📦 Чтобы разместить товар на платформе KARKAZ, выберите один из "
-            "вариантов:\n\n"
-            "🏭 <b>Производитель</b> — вы самостоятельно производите товар.\n"
-            "🤝 <b>Дилер</b> — вы приобретаете товар у производителей или "
-            "поставщиков и продаёте покупателям."
+        "ask_activity": "🏢 <b>В каком качестве вы осуществляете деятельность?</b>",
+        "ask_phone": (
+            "📞 <b>Введите номер телефона</b>\n"
+            "Например: +998 90 123 45 67"
         ),
         "ask_org": (
-            "🏢 <b>Введите название вашей организации</b>\n\n"
-            "Укажите название вашего предприятия, компании или торговой деятельности.\n"
-            "Например: ООО «Tashkent Build Trade»"
-        ),
-        "ask_brand": (
-            "🏷️ <b>Укажите бренд и марку товара</b>\n"
-            "📌 Укажите бренд производителя, марку и модель строительного материала.\n"
-            "Пример: цемент марки М400, производитель — Qizilqumsement."
+            "🏢 <b>Введите название организации</b>\n"
+            "Например: Tadjiyev Grup Management"
         ),
         "ask_description": (
             "📝 <b>Введите подробную информацию о товаре</b>\n"
-            "📦 Опишите, для чего используется товар, его размеры, состав и "
+            "📦 Опишите, для чего используется товар, его размеры, состав, бренд и "
             "технические характеристики — не менее {min} и не более {max} слов.\n"
             "ℹ️ Информация должна быть точной и понятной. Это поможет покупателям "
             "лучше понять товар и сделать правильный выбор."
         ),
         "ask_price": (
-            "🧱 <b>Укажите цену строительного материала</b>\n"
-            "Укажите цену выставляемого на продажу товара и единицу измерения.\n"
-            "Например: 1 тонна цемента — 850 000 сум или 1 штука кирпича — 1 200 сум."
+            "🧱 <b>Укажите цену</b>\n"
+            "Цена и единица измерения.\n"
+            "Например: 1 тонна цемента — 850 000 сум"
         ),
         "ask_certificate": (
-            "📜 <b>Укажите номер стандарта или сертификата товара</b>\n"
-            "🏗️ Укажите номер стандарта (ГОСТ, O'z DSt и др.) или сертификата "
-            "соответствия на ваш товар.\n"
-            "📝 Пример: ГОСТ 31108-2020 или номер сертификата: UZ.SMT.12345.\n"
-            "ℹ️ Если на товар нет сертификата или стандарта, напишите «Отсутствует».\n\n"
-            "📷 Вы можете написать номер текстом или отправить фото сертификата."
+            "📜 <b>Укажите номер стандарта или сертификата</b>\n"
+            "Например: ГОСТ 31108-2020\n"
+            "Если нет — напишите «Отсутствует». Можно также отправить фото сертификата."
         ),
         "ask_media": (
-            "📸 <b>Загрузите фото или видео вашего товара</b>\n"
-            "🏗️ Чтобы покупатели лучше рассмотрели ваш товар, отправьте "
-            "качественные и чёткие изображения.\n"
-            "📷 <b>Фото:</b> необходимо отправить не менее {min_photos} фотографий товара.\n"
-            "🎥 <b>Видео:</b> при желании вместо фото вы можете отправить видео с "
-            "вашим товаром.\n"
-            "⚠️ Фото или видео должны быть чёткими, качественными и относиться "
-            "именно к продаваемому товару.\n\n"
-            "👇 Отправьте фото (после отправки всех появится кнопка «Готово») или "
-            "отправьте одно видео."
+            "📸 <b>Отправьте фото или видео товара</b>\n"
+            "📷 Не менее {min_photos} фото или 🎥 1 видео.\n"
+            "Фото должны быть чёткими и относиться именно к этому товару."
         ),
         "ask_quantity": (
-            "📦 <b>Какое количество товара у вас в наличии?</b>\n"
-            "🏗️ Укажите текущее наличное количество предлагаемого к продаже "
-            "строительного материала и единицу измерения.\n"
-            "📝 Пример: 50 тонн цемента, 10 000 штук кирпича или 2 500 м² пеноплэкса.\n"
-            "ℹ️ Пожалуйста, укажите точное и актуальное количество для покупателей."
+            "📦 <b>Какое количество в наличии?</b>\n"
+            "Например: 50 тонн, 10 000 штук, 2 500 м²"
         ),
-        "ask_delivery": (
-            "🚚 <b>Как осуществляется доставка?</b>\n"
-            "📦 Выберите, каким способом покупатель получит товар. Пожалуйста, "
-            "отметьте вариант, соответствующий условиям доставки по заказу."
-        ),
+        "ask_delivery": "🚚 <b>Как осуществляется доставка?</b>",
         "ask_region": (
-            "📍 <b>Укажите регион, где находится ваш товар</b>\n"
-            "🏗️ Укажите, в какой области, городе или районе сейчас находится ваш "
-            "товар. Это поможет покупателям определить местонахождение товара и "
-            "спланировать доставку.\n"
-            "📝 Пример: город Ташкент, Чиланзарский район или Ташкентская область, "
-            "Зангиатинский район.\n"
-            "👇 Пожалуйста, точно укажите регион, где находится ваш товар."
-        ),
-        "ask_phone": (
-            "📞 <b>Введите номер телефона для связи</b>\n"
-            "Укажите ваш действующий номер телефона, чтобы покупатели могли с вами "
-            "связаться.\n"
-            "Например: +998 90 123 45 67"
+            "📍 <b>Где находится товар?</b>\n"
+            "Например: город Ташкент, Чиланзарский район"
         ),
         "need_text": "⚠️ Пожалуйста, напишите ответ текстом.",
         "text_too_short": "⚠️ Ответ слишком короткий. Пожалуйста, напишите подробнее.",
@@ -392,17 +279,8 @@ TEXTS = {
             "⚠️ Номер телефона указан неверно. Пожалуйста, введите в правильном формате.\n"
             "Например: +998 90 123 45 67"
         ),
-        "need_button": "👆 Пожалуйста, выберите один из вариантов ниже:",
-        "confirm_header": (
-            "✅ <b>Ваше объявление принято!</b>\n"
-            "🎉 Процесс размещения объявления на платформе KARKAZ завершён. Ваше "
-            "объявление рассматривается модератором.\n"
-            "🔎 Модератор проверит ваше объявление и оценит его соответствие "
-            "установленным требованиям. После одобрения объявление будет размещено "
-            "на платформе.\n"
-            "📋 Проверьте введённые данные. Если всё верно — подтвердите или внесите "
-            "необходимые изменения."
-        ),
+        "ad_title": "📝 <b>Ваше объявление формируется</b>",
+        "confirm_ask": "Данные верны? Подтвердите или измените 👇",
         "edit_restart": "✏️ Хорошо, введём данные заново.",
         "final": (
             "✅ <b>Ваше объявление принято!</b>\n"
@@ -417,7 +295,6 @@ TEXTS = {
 LABELS = {
     "uz": {
         "activity": {"legal": "🏛️ Yuridik shaxs", "individual": "👤 Jismoniy shaxs"},
-        "role": {"producer": "🏭 Ishlab chiqaruvchi", "dealer": "🤝 Diler"},
         "delivery": {
             "buyer": "🚛 Xaridor hisobidan",
             "included": "📦 Narxga kiritilgan",
@@ -430,7 +307,6 @@ LABELS = {
     },
     "ru": {
         "activity": {"legal": "🏛️ Юридическое лицо", "individual": "👤 Физическое лицо"},
-        "role": {"producer": "🏭 Производитель", "dealer": "🤝 Дилер"},
         "delivery": {
             "buyer": "🚛 За счёт покупателя",
             "included": "📦 Включена в цену",
@@ -445,40 +321,28 @@ LABELS = {
  
 SUMMARY = {
     "uz": {
-        "title": "📋 <b>Sizning e'loningiz:</b>",
         "activity": "🏢 Faoliyat turi",
-        "role": "🏭 Faoliyat sifati",
+        "phone": "📞 Telefon",
         "org": "🏢 Tashkilot",
-        "brand": "🏷️ Brend va marka",
         "description": "📝 Ma'lumot",
         "price": "🧱 Narxi",
         "certificate": "📜 Standart/sertifikat",
-        "media": "📸 Rasm/video",
         "quantity": "📦 Miqdori",
         "delivery": "🚚 Yetkazib berish",
         "region": "📍 Hudud",
-        "phone": "📞 Telefon",
         "photo_attached": "📷 rasm biriktirilgan",
-        "photos": "{n} ta rasm",
-        "video": "video",
     },
     "ru": {
-        "title": "📋 <b>Ваше объявление:</b>",
         "activity": "🏢 Вид деятельности",
-        "role": "🏭 Статус",
+        "phone": "📞 Телефон",
         "org": "🏢 Организация",
-        "brand": "🏷️ Бренд и марка",
         "description": "📝 Описание",
         "price": "🧱 Цена",
         "certificate": "📜 Стандарт/сертификат",
-        "media": "📸 Фото/видео",
         "quantity": "📦 Количество",
         "delivery": "🚚 Доставка",
         "region": "📍 Регион",
-        "phone": "📞 Телефон",
         "photo_attached": "📷 фото приложено",
-        "photos": "{n} фото",
-        "video": "видео",
     },
 }
  
@@ -597,12 +461,6 @@ def split_text(text: str, limit: int = 3900) -> list:
     return chunks
  
  
-async def send_long(send, text: str, reply_markup=None) -> None:
-    chunks = split_text(text)
-    for i, chunk in enumerate(chunks):
-        await send(chunk, reply_markup=reply_markup if i == len(chunks) - 1 else None)
- 
- 
 async def mark_chosen(callback: CallbackQuery, label: str) -> None:
     """Bosilgan tugmalarni olib tashlab, tanlovni xabar tagiga yozib qo'yadi."""
     try:
@@ -622,15 +480,14 @@ async def remove_buttons(callback: CallbackQuery) -> None:
  
  
 TEXT_KEYS = {
+    Form.phone.state: "ask_phone",
     Form.org_name.state: "ask_org",
-    Form.brand.state: "ask_brand",
     Form.description.state: "ask_description",
     Form.price.state: "ask_price",
     Form.certificate.state: "ask_certificate",
     Form.media.state: "ask_media",
     Form.quantity.state: "ask_quantity",
     Form.region.state: "ask_region",
-    Form.phone.state: "ask_phone",
 }
  
  
@@ -642,22 +499,10 @@ async def ask(target: Message, state: FSMContext, step: State, lang: str) -> Non
         await target.answer(ASK_LANGUAGE, reply_markup=language_kb())
     elif key == Form.activity.state:
         await target.answer(T(lang, "ask_activity"), reply_markup=options_kb(lang, "activity", "act"))
-    elif key == Form.role.state:
-        await target.answer(T(lang, "ask_role"), reply_markup=options_kb(lang, "role", "role"))
     elif key == Form.delivery.state:
         await target.answer(T(lang, "ask_delivery"), reply_markup=options_kb(lang, "delivery", "deliv"))
     else:
         await target.answer(T(lang, TEXT_KEYS[key]))
- 
- 
-def media_summary(data: dict, lang: str) -> str:
-    S = SUMMARY[lang]
-    parts = []
-    if data.get("photos"):
-        parts.append(S["photos"].format(n=len(data["photos"])))
-    if data.get("video"):
-        parts.append(S["video"])
-    return " + ".join(parts) or "—"
  
  
 def cert_summary(data: dict, lang: str) -> str:
@@ -669,75 +514,84 @@ def cert_summary(data: dict, lang: str) -> str:
     return " + ".join(parts) or "—"
  
  
-def build_summary(data: dict, lang: str) -> str:
+def ad_lines(data: dict, lang: str) -> list:
+    """E'lon maydonlari (savollar tartibida)."""
     S, lab = SUMMARY[lang], LABELS[lang]
-    return "\n".join(
-        [
-            S["title"],
-            "",
-            f"{S['activity']}: {lab['activity'][data['activity']]}",
-            f"{S['role']}: {lab['role'][data['role']]}",
-            f"{S['org']}: {esc(data['org_name'])}",
-            f"{S['brand']}: {esc(data['brand'])}",
-            f"{S['description']}: {esc(data['description'])}",
-            f"{S['price']}: {esc(data['price'])}",
-            f"{S['certificate']}: {cert_summary(data, lang)}",
-            f"{S['media']}: {media_summary(data, lang)}",
-            f"{S['quantity']}: {esc(data['quantity'])}",
-            f"{S['delivery']}: {lab['delivery'][data['delivery']]}",
-            f"{S['region']}: {esc(data['region'])}",
-            f"{S['phone']}: {esc(data['phone'])}",
-        ]
-    )
+    return [
+        f"{S['activity']}: {lab['activity'][data['activity']]}",
+        f"{S['phone']}: {esc(data['phone'])}",
+        f"{S['org']}: {esc(data['org_name'])}",
+        f"{S['description']}: {esc(data['description'])}",
+        f"{S['price']}: {esc(data['price'])}",
+        f"{S['certificate']}: {cert_summary(data, lang)}",
+        f"{S['quantity']}: {esc(data['quantity'])}",
+        f"{S['delivery']}: {lab['delivery'][data['delivery']]}",
+        f"{S['region']}: {esc(data['region'])}",
+    ]
+ 
+ 
+def build_summary(data: dict, lang: str) -> str:
+    """Foydalanuvchiga ko'rsatiladigan e'lon (tepada: 'E'loningiz shakllantirilmoqda')."""
+    return "\n".join([T(lang, "ad_title"), ""] + ad_lines(data, lang))
  
  
 def build_admin_text(data: dict, user) -> str:
     """Admin uchun ariza matni (doim o'zbek tilida)."""
-    S, lab = SUMMARY["uz"], LABELS["uz"]
     username = f"@{user.username}" if user.username else "username yo'q"
     return "\n".join(
         [
             "🆕 <b>YANGI E'LON</b>",
-            f"🕒 {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-            f"🌐 E'lon tili: {data['lang'].upper()}",
+            f"🕒 {datetime.now().strftime('%Y-%m-%d %H:%M')}  |  🌐 {data['lang'].upper()}",
             "",
-            f"{S['activity']}: {lab['activity'][data['activity']]}",
-            f"{S['role']}: {lab['role'][data['role']]}",
-            f"{S['org']}: {esc(data['org_name'])}",
-            f"{S['brand']}: {esc(data['brand'])}",
-            f"{S['description']}: {esc(data['description'])}",
-            f"{S['price']}: {esc(data['price'])}",
-            f"{S['certificate']}: {cert_summary(data, 'uz')}",
-            f"{S['media']}: {media_summary(data, 'uz')}",
-            f"{S['quantity']}: {esc(data['quantity'])}",
-            f"{S['delivery']}: {lab['delivery'][data['delivery']]}",
-            f"{S['region']}: {esc(data['region'])}",
-            f"{S['phone']}: {esc(data['phone'])}",
+        ]
+        + ad_lines(data, "uz")
+        + [
             "",
-            f"👤 Yuboruvchi: {esc(user.full_name)} | {esc(username)} | ID: <code>{user.id}</code>",
+            f"👤 {esc(user.full_name)} | {esc(username)} | ID: <code>{user.id}</code>",
         ]
     )
  
  
-async def deliver_to_admin(data: dict, user) -> None:
-    """Arizani (matn + rasm/video + sertifikat rasmi) adminga yuboradi."""
-    try:
-        await send_long(
-            lambda text, reply_markup=None: bot.send_message(ADMIN_ID, text),
-            build_admin_text(data, user),
-        )
- 
-        photos = data.get("photos", [])
-        for i in range(0, len(photos), 10):
-            chunk = photos[i:i + 10]
-            if len(chunk) == 1:
-                await bot.send_photo(ADMIN_ID, chunk[0])
+async def send_media(chat_id: int, data: dict, caption: str = None) -> None:
+    """Rasm/videolarni albom qilib yuboradi; caption birinchi elementga qo'yiladi."""
+    items = [("photo", f) for f in data.get("photos", [])]
+    if data.get("video"):
+        items.append(("video", data["video"]))
+    for i in range(0, len(items), 10):
+        chunk = items[i:i + 10]
+        cap = caption if i == 0 else None
+        if len(chunk) == 1:
+            kind, fid = chunk[0]
+            if kind == "photo":
+                await bot.send_photo(chat_id, fid, caption=cap)
             else:
-                await bot.send_media_group(ADMIN_ID, [InputMediaPhoto(media=f) for f in chunk])
+                await bot.send_video(chat_id, fid, caption=cap)
+        else:
+            media = []
+            for j, (kind, fid) in enumerate(chunk):
+                c = cap if j == 0 else None
+                cls = InputMediaPhoto if kind == "photo" else InputMediaVideo
+                media.append(cls(media=fid, caption=c, parse_mode=ParseMode.HTML))
+            await bot.send_media_group(chat_id, media)
  
-        if data.get("video"):
-            await bot.send_video(ADMIN_ID, data["video"], caption="🎥 Video")
  
+async def send_ad(chat_id: int, text: str, data: dict) -> None:
+    """E'lonni rasm/video BILAN BIRGA yuboradi.
+    Matn 1024 belgidan oshmasa — rasm tagida (bitta xabar). Oshsa — albom, undan keyin matn."""
+    has_media = bool(data.get("photos") or data.get("video"))
+    if has_media and len(text) <= CAPTION_LIMIT:
+        await send_media(chat_id, data, caption=text)
+        return
+    if has_media:
+        await send_media(chat_id, data)
+    for chunk in split_text(text):
+        await bot.send_message(chat_id, chunk)
+ 
+ 
+async def deliver_to_admin(data: dict, user) -> None:
+    """Arizani (rasm/video + matn birga, so'ng sertifikat rasmi) adminga yuboradi."""
+    try:
+        await send_ad(ADMIN_ID, build_admin_text(data, user), data)
         if data.get("cert_photo"):
             await bot.send_photo(ADMIN_ID, data["cert_photo"], caption="📜 Standart / sertifikat rasmi")
     except Exception as e:
@@ -755,9 +609,8 @@ async def save_to_sheet(data: dict, user) -> None:
         datetime.now().strftime("%Y-%m-%d %H:%M"),
         data["lang"].upper(),
         lab["activity"][data["activity"]],
-        lab["role"][data["role"]],
+        data["phone"],
         data["org_name"],
-        data["brand"],
         data["description"],
         data["price"],
         cert,
@@ -766,7 +619,6 @@ async def save_to_sheet(data: dict, user) -> None:
         data["quantity"],
         lab["delivery"][data["delivery"]],
         data["region"],
-        data["phone"],
         username,
         str(user.id),
     ]
@@ -777,10 +629,11 @@ async def save_to_sheet(data: dict, user) -> None:
  
  
 async def show_confirmation(target: Message, state: FSMContext, lang: str) -> None:
+    """E'lonni rasm/video bilan birga ko'rsatadi, so'ng tasdiqlash tugmalarini chiqaradi."""
     data = await state.get_data()
     await state.set_state(Form.confirm)
-    await target.answer(T(lang, "confirm_header"))
-    await send_long(target.answer, build_summary(data, lang), reply_markup=confirm_kb(lang))
+    await send_ad(target.chat.id, build_summary(data, lang), data)
+    await target.answer(T(lang, "confirm_ask"), reply_markup=confirm_kb(lang))
  
  
 # ---------------------------------------------------------------------------
@@ -831,20 +684,7 @@ async def choose_activity(callback: CallbackQuery, state: FSMContext):
         return
     await state.update_data(activity=code)
     await mark_chosen(callback, LABELS[lang]["activity"][code])
-    await ask(callback.message, state, Form.role, lang)
-    await callback.answer()
- 
- 
-@router.callback_query(Form.role, F.data.startswith("role:"))
-async def choose_role(callback: CallbackQuery, state: FSMContext):
-    lang = (await state.get_data())["lang"]
-    code = callback.data.split(":", 1)[1]
-    if code not in LABELS[lang]["role"]:
-        await callback.answer()
-        return
-    await state.update_data(role=code)
-    await mark_chosen(callback, LABELS[lang]["role"][code])
-    await ask(callback.message, state, Form.org_name, lang)
+    await ask(callback.message, state, Form.phone, lang)
     await callback.answer()
  
  
@@ -862,22 +702,42 @@ async def choose_delivery(callback: CallbackQuery, state: FSMContext):
  
  
 # ---------------------------------------------------------------------------
-# MATNLI BOSQICHLAR
+# TELEFON (2-savol)
+# ---------------------------------------------------------------------------
+@router.message(Form.phone, F.contact)
+async def get_phone_contact(message: Message, state: FSMContext):
+    lang = (await state.get_data())["lang"]
+    await state.update_data(phone=message.contact.phone_number)
+    await ask(message, state, Form.org_name, lang)
+ 
+ 
+@router.message(Form.phone, F.text & ~F.text.startswith("/"))
+async def get_phone(message: Message, state: FSMContext):
+    lang = (await state.get_data())["lang"]
+    text = message.text.strip()
+    if not is_valid_phone(text):
+        await message.answer(T(lang, "phone_invalid"))
+        return
+    await state.update_data(phone=text)
+    await ask(message, state, Form.org_name, lang)
+ 
+ 
+# ---------------------------------------------------------------------------
+# QISQA MATNLI BOSQICHLAR
 # ---------------------------------------------------------------------------
 TEXT_FILTER = F.text & ~F.text.startswith("/")
  
-# holat -> (saqlanadigan maydon, keyingi bosqich)
+# holat -> (saqlanadigan maydon, keyingi bosqich; None = tasdiqlashga)
 SHORT_TEXT_STEPS = {
-    Form.org_name.state: ("org_name", Form.brand),
-    Form.brand.state: ("brand", Form.description),
+    Form.org_name.state: ("org_name", Form.description),
     Form.price.state: ("price", Form.certificate),
     Form.quantity.state: ("quantity", Form.delivery),
-    Form.region.state: ("region", Form.phone),
+    Form.region.state: ("region", None),
 }
  
  
 @router.message(
-    StateFilter(Form.org_name, Form.brand, Form.price, Form.quantity, Form.region),
+    StateFilter(Form.org_name, Form.price, Form.quantity, Form.region),
     TEXT_FILTER,
 )
 async def short_text_answer(message: Message, state: FSMContext):
@@ -891,7 +751,10 @@ async def short_text_answer(message: Message, state: FSMContext):
         return
     field, next_step = SHORT_TEXT_STEPS[await state.get_state()]
     await state.update_data(**{field: text})
-    await ask(message, state, next_step, lang)
+    if next_step is None:
+        await show_confirmation(message, state, lang)
+    else:
+        await ask(message, state, next_step, lang)
  
  
 @router.message(Form.description, TEXT_FILTER)
@@ -1005,25 +868,6 @@ async def media_invalid(message: Message, state: FSMContext):
     await message.answer(T(lang, "media_invalid"))
  
  
-# --- telefon ---
-@router.message(Form.phone, F.contact)
-async def get_phone_contact(message: Message, state: FSMContext):
-    lang = (await state.get_data())["lang"]
-    await state.update_data(phone=message.contact.phone_number)
-    await show_confirmation(message, state, lang)
- 
- 
-@router.message(Form.phone, TEXT_FILTER)
-async def get_phone(message: Message, state: FSMContext):
-    lang = (await state.get_data())["lang"]
-    text = message.text.strip()
-    if not is_valid_phone(text):
-        await message.answer(T(lang, "phone_invalid"))
-        return
-    await state.update_data(phone=text)
-    await show_confirmation(message, state, lang)
- 
- 
 # ---------------------------------------------------------------------------
 # TASDIQLASH
 # ---------------------------------------------------------------------------
@@ -1058,14 +902,13 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
 # ---------------------------------------------------------------------------
 # TUGMA KUTILAYOTGAN BOSQICHLARDA MATN YOZILSA -> savolni qayta ko'rsatamiz
 # ---------------------------------------------------------------------------
-@router.message(StateFilter(Form.language, Form.activity, Form.role, Form.delivery))
+@router.message(StateFilter(Form.language, Form.activity, Form.delivery))
 async def button_expected(message: Message, state: FSMContext):
     current = await state.get_state()
     lang = (await state.get_data()).get("lang", "uz")
     step = {
         Form.language.state: Form.language,
         Form.activity.state: Form.activity,
-        Form.role.state: Form.role,
         Form.delivery.state: Form.delivery,
     }[current]
     await ask(message, state, step, lang)
@@ -1074,8 +917,7 @@ async def button_expected(message: Message, state: FSMContext):
 @router.message(StateFilter(Form.confirm))
 async def confirm_expected(message: Message, state: FSMContext):
     lang = (await state.get_data())["lang"]
-    await message.answer(T(lang, "need_button"))
-    await send_long(message.answer, build_summary(await state.get_data(), lang), reply_markup=confirm_kb(lang))
+    await message.answer(T(lang, "confirm_ask"), reply_markup=confirm_kb(lang))
  
  
 # ---------------------------------------------------------------------------
@@ -1083,8 +925,8 @@ async def confirm_expected(message: Message, state: FSMContext):
 # ---------------------------------------------------------------------------
 @router.message(
     StateFilter(
-        Form.org_name, Form.brand, Form.description, Form.price,
-        Form.quantity, Form.region, Form.phone,
+        Form.phone, Form.org_name, Form.description, Form.price,
+        Form.quantity, Form.region,
     )
 )
 async def text_expected(message: Message, state: FSMContext):
